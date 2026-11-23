@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Product Management</title>
+  <style>
+    body { font-family: sans-serif; background: #add8e6; text-align: center; max-width: 500px; margin: auto; }
+    .box { background: #fff; padding: 15px; margin: 15px 0; border-radius: 8px; }
+    input, button { padding: 8px; margin: 4px; }
+    input { width: 85%; }
+    button { background: blue; color: #fff; border: 0; cursor: pointer; }
+    .item { background: #eee; padding: 10px; margin: 8px 0; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+  <h2>Product Management</h2>
+
+  <form class="box" id="form" onsubmit="save(event)">
+    <input name="id" placeholder="Product ID" required>
+    <input name="name" placeholder="Name" required>
+    <input name="category" placeholder="Category" required>
+    <input name="brand" placeholder="Brand" required>
+    <input name="price" type="number" placeholder="Price" required>
+    <input name="stock" type="number" placeholder="Stock" required><br>
+    <button id="btn">Add Product</button>
+    <button type="button" onclick="resetForm()">Clear</button>
+  </form>
+
+  <div class="box">
+    <input id="q" placeholder="Search Name">
+    <button onclick="load(q.value)">Search</button>
+    <button onclick="load()">Show All</button>
+    <div id="list"></div>
+  </div>
+
+  <script>
+    let editId = null;
+    const req = (url, method = "GET", body) =>
+      fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) });
+
+    async function save(e) {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      data.price = +data.price; data.stock = +data.stock;
+      await req(editId ? `/update/${editId}` : "/add", editId ? "PUT" : "POST", data);
+      resetForm(); load();
+    }
+
+    function edit(p) {
+      editId = p._id;
+      Object.keys(p).forEach(k => form[k] && (form[k].value = p[k]));
+      btn.innerText = "Update Product";
+    }
+
+    function resetForm() { editId = null; form.reset(); btn.innerText = "Add Product"; }
+
+    async function del(id) { confirm("Delete?") && (await req(`/delete/${id}`, "DELETE"), load()); }
+
+    async function load(search = "") {
+      const res = await req(search ? `/search/${encodeURIComponent(search)}` : "/view");
+      const items = await res.json();
+      list.innerHTML = items.map(p => `
+        <div class="item">
+          <b>${p.name}</b> (${p.brand}) - ₹${p.price} | Stock: ${p.stock}<br>
+          <small>ID: ${p.id} | Category: ${p.category}</small><br>
+          <button onclick='edit(${JSON.stringify(p)})'>Edit</button>
+          <button onclick="del('${p._id}')">Delete</button>
+        </div>`).join("") || "No Products";
+    }
+
+    load();
+  </script>
+</body>
+</html>
