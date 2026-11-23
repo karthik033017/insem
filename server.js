@@ -1,86 +1,85 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const path = require('path');
+require("dotenv").config();
+
+const path = require("path");
+const express = require("express");
+const mongoose = require("mongoose");
 
 const app = express();
 app.use(express.json());
 
-// Connect to MongoDB (update the URI if using MongoDB Atlas)
-mongoose.connect('mongodb://127.0.0.1:27017/productDB')
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Serve only the page itself, never the whole folder (.env would be exposed)
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
 
-// Product Schema & Model
-const productSchema = new mongoose.Schema({
-  id: { type: String, required: true },
-  name: { type: String, required: true },
-  category: { type: String, required: true },
-  brand: { type: String, required: true },
-  price: { type: Number, required: true },
-  stock: { type: Number, required: true }
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => console.log("Database Connected"))
+  .catch(err => console.log(err));
+
+const Product = mongoose.model("Product", {
+  id: String,
+  name: String,
+  category: String,
+  brand: String,
+  price: Number,
+  stock: Number,
+  description: String
 });
 
-const Product = mongoose.model('Product', productSchema);
-
-// Serve index.html from the same directory as server.js
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// Only allow these fields from the client
+const pick = b => ({
+  id: b.id, name: b.name, category: b.category, brand: b.brand,
+  price: b.price, stock: b.stock, description: b.description
 });
 
-// Add a new product
-app.post('/add', async (req, res) => {
+const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+app.post("/add", async (req, res) => {
   try {
-    const product = new Product(req.body);
-    await product.save();
-    res.status(201).json(product);
+    await new Product(pick(req.body)).save();
+    res.send("Product Added");
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).send("Error Adding Product");
   }
 });
 
-// View all products
-app.get('/view', async (req, res) => {
+app.get("/view", async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    res.json(await Product.find());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json([]);
   }
 });
 
-// Search products by name (case-insensitive)
-app.get('/search/:name', async (req, res) => {
+app.get("/search/:name", async (req, res) => {
   try {
     const products = await Product.find({
-      name: { $regex: req.params.name, $options: 'i' }
+      name: { $regex: escapeRegex(req.params.name), $options: "i" }
     });
     res.json(products);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json([]);
   }
 });
 
-// Update an existing product by MongoDB _id
-app.put('/update/:id', async (req, res) => {
+app.put("/update/:id", async (req, res) => {
   try {
-    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).send("Invalid ID");
+    const product = await Product.findByIdAndUpdate(
+      req.params.id, pick(req.body), { new: true, runValidators: true }
+    );
+    res.send(product ? "Product Updated" : "Product Not Found");
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).send("Error Updating Product");
   }
 });
 
-// Delete a product by MongoDB _id
-app.delete('/delete/:id', async (req, res) => {
+app.delete("/delete/:id", async (req, res) => {
   try {
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted successfully' });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).send("Invalid ID");
+    const product = await Product.findByIdAndDelete(req.params.id);
+    res.send(product ? "Product Deleted" : "Product Not Found");
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).send("Error Deleting Product");
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+app.listen(3000, () => console.log("Server Started on http://localhost:3000"));
