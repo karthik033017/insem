@@ -35,8 +35,14 @@
 
   <script>
     let editId = null;
+    let products = {};
+
     const req = (url, method = "GET", body) =>
       fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) });
+
+    // Stops product text from being run as HTML
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
     async function save(e) {
       e.preventDefault();
@@ -46,25 +52,29 @@
       resetForm(); load();
     }
 
-    function edit(p) {
-      editId = p._id;
-      Object.keys(p).forEach(k => form[k] && (form[k].value = p[k]));
+    function edit(_id) {
+      const p = products[_id];
+      editId = _id;
+      ["id", "name", "category", "brand", "price", "stock"].forEach(k => form[k].value = p[k]);
       btn.innerText = "Update Product";
     }
 
     function resetForm() { editId = null; form.reset(); btn.innerText = "Add Product"; }
 
-    async function del(id) { confirm("Delete?") && (await req(`/delete/${id}`, "DELETE"), load()); }
+    async function del(id) {
+      if (confirm("Delete?")) { await req(`/delete/${id}`, "DELETE"); load(); }
+    }
 
     async function load(search = "") {
       const res = await req(search ? `/search/${encodeURIComponent(search)}` : "/view");
       const items = await res.json();
+      products = Object.fromEntries(items.map(p => [p._id, p]));
       list.innerHTML = items.map(p => `
         <div class="item">
-          <b>${p.name}</b> (${p.brand}) - ₹${p.price} | Stock: ${p.stock}<br>
-          <small>ID: ${p.id} | Category: ${p.category}</small><br>
-          <button onclick='edit(${JSON.stringify(p)})'>Edit</button>
-          <button onclick="del('${p._id}')">Delete</button>
+          <b>${esc(p.name)}</b> (${esc(p.brand)}) - ₹${esc(p.price)} | Stock: ${esc(p.stock)}<br>
+          <small>ID: ${esc(p.id)} | Category: ${esc(p.category)}</small><br>
+          <button onclick="edit('${esc(p._id)}')">Edit</button>
+          <button onclick="del('${esc(p._id)}')">Delete</button>
         </div>`).join("") || "No Products";
     }
 
